@@ -41,6 +41,7 @@ This projects is a C++ project template. It includes everything a "Modern" C++ p
   * [RapidJSON](https://rapidjson.org/)
   * [Lyra](https://github.com/bfgroup/Lyra) command line arguments parser
   * [{fmt}](https://github.com/fmtlib/fmt) formatting library
+  * [sciplot](https://sciplot.github.io/) data plotting (command line tool, feature only compiled in if available)
 
 * Unittests with Coverage using [Catch2](https://github.com/catchorg/Catch2)
 
