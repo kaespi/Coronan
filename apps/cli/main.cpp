@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
     auto const country_data = coronan::CoronaAPIClient{}.request_country_data(opt.country_code);
 #ifdef USE_SCIPLOT
     if (opt.plot_file != "")
-      plot_data(opt.plot_file, country_data);
+      coronan::cli::plotting::plot_data(opt.plot_file, country_data);
     else
 #endif
     print_data(country_data);

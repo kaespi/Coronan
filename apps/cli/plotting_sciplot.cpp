@@ -1,25 +1,50 @@
 
 #include "plotting_sciplot.hpp"
 
+#include <cmath>
 #include <iostream>
-#include <vector>
 #include <regex>
 #include <tuple>
-#include <Poco/DateTimeParser.h>
+#include <vector>
 #include <Poco/DateTimeFormatter.h>
+#include <Poco/DateTimeParser.h>
 #include <sciplot/sciplot.hpp>
+
+namespace coronan::cli::plotting {};
 
 namespace
 {
 // wrapper class to offer an easy interface for adding one curve to the plot
 // (mainly handles the special case we're confronted with here: dates on the x-axis)
-class CoronaPlot : public sciplot::Plot
+class CoronanPlot : public sciplot::Plot
 {
   public:
   template <typename Time_t, typename Data_t>
   void plot_curve(std::vector<Time_t> const& t, std::vector<Data_t> const& d, std::string const& label);
 };
 
+template <typename Time_t, typename Data_t>
+void CoronanPlot::plot_curve(std::vector<Time_t> const& t, std::vector<Data_t> const& d, std::string const& label)
+{
+  auto& curve_specs = this->drawCurve(t, d);
+  try
+  {
+    // sciplot assumes that the data in the 1st column are numeric values. Therefore
+    // it doesn't produce the "using ..." string which, however, is needed in Gnuplot
+    // for the date/time input. Therefore the specifications for the string are re-
+    // written here to produce a "using 1:2" in the plot command.
+    auto [what, with, linestyle] = coronan::cli::plotting::parse_gp_plot_string(curve_specs.repr());
+    curve_specs = sciplot::DrawSpecs(what, "1:2", with).lineStyle(linestyle).label(label);
+  }
+  catch (std::exception const& e)
+  {
+    std::cerr << "updating the gp string failed: " << e.what() << std::endl;
+  }
+}
+} // namespace
+
+namespace coronan::cli::plotting
+{
 struct curves_data
 {
   curves_data() = default;
@@ -40,40 +65,12 @@ struct curves_data
 
 // date formatting according to ISO 8601
 std::string const gp_dateformat = "%Y-%m-%d";
-
+// date formatting as provided by the corona-api.com service
 std::string const covid_dateformat = "%Y-%m-%dT%H:%M:%S.%iZ";
-
-Poco::DateTime convert_date_str_to_poco_date(std::string const& s);
-std::tuple<std::string, std::string, int> parse_gp_plot_string(std::string const& s);
-int get_suitable_xtics(decltype(curves_data::t) const& t, int num_tics=5);
-} // namespace
-
-namespace sciplot::internal
-{
-// Gnuplot time format in the data file is a special case. It's actually a string
-// but the strings are not to be interpreted as labels. Therefore they need to be
-// printed without quotes. To achieve that the (sciplot internal) function 
-// escapeIfNeeded() can be specialized.
-template <>
-auto escapeIfNeeded<Poco::DateTime>(Poco::DateTime const& val)
-{
-    return Poco::DateTimeFormatter::format(val, gp_dateformat);
-}
-
-// sciplot assumes that the data in the vectors are either string or numbers. Since
-// we want to handle missing data using the std::optional container, we need a
-// template specialization to handle this case and print the missing symbol in case
-// data is unavailable
-template <>
-auto escapeIfNeeded<decltype(coronan::CountryData::TimelineData::active)>(decltype(coronan::CountryData::TimelineData::active) const& val)
-{
-    return val ? std::to_string(val.value()) : sciplot::MISSING_INDICATOR;
-}
-} // namespace sciplot::internal
 
 void plot_data(std::string const& out_file, coronan::CountryData const& country_data)
 {
-  CoronaPlot plot;
+  CoronanPlot plot;
   plot.xlabel("Time");
   plot.ylabel("Cases");
 
@@ -107,8 +104,6 @@ void plot_data(std::string const& out_file, coronan::CountryData const& country_
   fig.save(out_file);
 }
 
-namespace
-{
 Poco::DateTime convert_date_str_to_poco_date(std::string const& s)
 {
   int tzd = 0;
@@ -125,28 +120,32 @@ std::tuple<std::string, std::string, int> parse_gp_plot_string(std::string const
     throw std::runtime_error("regex doesn't match on \"" + s + "\"");
 }
 
-template <typename Time_t, typename Data_t>
-void CoronaPlot::plot_curve(std::vector<Time_t> const& t, std::vector<Data_t> const& d, std::string const& label)
-{
-  auto& curve_specs = this->drawCurve(t, d);
-  try
-  {
-    // sciplot assumes that the data in the 1st column are numeric values. Therefore
-    // it doesn't produce the "using ..." string which, however, is needed in Gnuplot
-    // for the date/time input. Therefore the specifications for the string are re-
-    // written here to produce a "using 1:2" in the plot command.
-    auto [what, with, linestyle] = parse_gp_plot_string(curve_specs.repr());
-    curve_specs = sciplot::DrawSpecs(what, "1:2", with).lineStyle(linestyle).label(label);
-  }
-  catch (std::exception const& e)
-  {
-    std::cerr << "updating the gp string failed: " << e.what() << std::endl;
-  }
-}
-
-int get_suitable_xtics(decltype(curves_data::t) const& t, int num_tics)
+int get_suitable_xtics(std::vector<Poco::DateTime> const& t, int num_tics)
 {
   auto dt = t.front() - t.back();
-  return dt.totalSeconds() / num_tics;
+  return std::abs(dt.totalSeconds()) / num_tics;
 }
-} // namespace
+} // namespace coronan::cli::plotting
+
+namespace sciplot::internal
+{
+// Gnuplot time format in the data file is a special case. It's actually a string
+// but the strings are not to be interpreted as labels. Therefore they need to be
+// printed without quotes. To achieve that the (sciplot internal) function 
+// escapeIfNeeded() can be specialized.
+template <>
+auto escapeIfNeeded<Poco::DateTime>(Poco::DateTime const& val)
+{
+    return Poco::DateTimeFormatter::format(val, coronan::cli::plotting::gp_dateformat);
+}
+
+// sciplot assumes that the data in the vectors are either string or numbers. Since
+// we want to handle missing data using the std::optional container, we need a
+// template specialization to handle this case and print the missing symbol in case
+// data is unavailable
+template <>
+auto escapeIfNeeded<decltype(coronan::CountryData::TimelineData::active)>(decltype(coronan::CountryData::TimelineData::active) const& val)
+{
+    return val ? std::to_string(val.value()) : sciplot::MISSING_INDICATOR;
+}
+} // namespace sciplot::internal
