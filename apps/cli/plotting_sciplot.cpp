@@ -10,9 +10,6 @@
 #include <tuple>
 #include <vector>
 
-namespace coronan::cli::plotting {
-};
-
 namespace {
 // wrapper class to offer an easy interface for adding one curve to the plot
 // (mainly handles the special case we're confronted with here: dates on the x-axis)
