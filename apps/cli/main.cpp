@@ -32,7 +32,7 @@ int main(int argc, char* argv[])
       coronan::cli::plotting::plot_data(opt.plot_file, country_data);
     else
 #endif
-    print_data(country_data);
+      print_data(country_data);
   }
   catch (coronan::SSLException const& ex)
   {
@@ -57,13 +57,12 @@ CmdOpt parse_commandline_arguments(lyra::args const& args)
 {
   CmdOpt opt;
   bool help_request = false;
-  auto command_line_parser =
-      lyra::cli_parser() | lyra::help(help_request) | 
-      lyra::opt(opt.country_code, "country")["-c"]["--country"]("Country Code")
+  auto command_line_parser = lyra::cli_parser() | lyra::help(help_request) |
+                             lyra::opt(opt.country_code, "country")["-c"]["--country"]("Country Code")
 #ifdef USE_SCIPLOT
-      | lyra::opt(opt.plot_file, "plot file")["-p"]["--plot"]("Output to a graphics file")
+                             | lyra::opt(opt.plot_file, "plot file")["-p"]["--plot"]("Output to a graphics file")
 #endif
-  ;
+      ;
 
   std::stringstream usage;
   usage << command_line_parser;

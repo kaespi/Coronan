@@ -13,7 +13,8 @@ find_package(fmt REQUIRED CONFIG)
 find_package(sciplot CONFIG)
 if(sciplot_FOUND)
   add_definitions(-DUSE_SCIPLOT)
-  set(CORONAN_CLI_SOURCES ${CORONAN_CLI_SOURCES} ${CMAKE_CURRENT_LIST_DIR}/plotting_sciplot.cpp)
+  set(CORONAN_CLI_SOURCES ${CORONAN_CLI_SOURCES}
+                          ${CMAKE_CURRENT_LIST_DIR}/plotting_sciplot.cpp)
 endif()
 
 add_executable(coronan_cli ${CORONAN_CLI_SOURCES})
