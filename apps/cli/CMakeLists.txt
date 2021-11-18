@@ -29,7 +29,7 @@ target_link_libraries(
   PRIVATE coronan::library
   PRIVATE coronan::compile_warnings
   PRIVATE coronan::compile_options
-  $<$<BOOL:sciplot_FOUND>:sciplot::sciplot>)
+  $<$<BOOL:${sciplot_FOUND}>:sciplot::sciplot>)
 
 include(StaticAnalyzers)
 enable_static_analysis(coronan_cli)
