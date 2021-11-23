@@ -8,6 +8,7 @@
 #include <regex>
 #include <sciplot/sciplot.hpp>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -17,13 +18,13 @@ class CoronanPlot : public sciplot::Plot
 {
 public:
   template <typename Time_t, typename Data_t>
-  void plot_curve(std::vector<Time_t> const& t, std::vector<Data_t> const& d, std::string const& label);
+  void plot_curve(std::pair<std::vector<Time_t> const&, std::vector<Data_t> const&> data, std::string const& label);
 };
 
 template <typename Time_t, typename Data_t>
-void CoronanPlot::plot_curve(std::vector<Time_t> const& t, std::vector<Data_t> const& d, std::string const& label)
+void CoronanPlot::plot_curve(std::pair<std::vector<Time_t> const&, std::vector<Data_t> const&> data, std::string const& label)
 {
-  auto& curve_specs = this->drawCurve(t, d);
+  auto& curve_specs = this->drawCurve(data.first, data.second);
   try
   {
     // sciplot assumes that the data in the 1st column are numeric values. Therefore
@@ -41,10 +42,17 @@ void CoronanPlot::plot_curve(std::vector<Time_t> const& t, std::vector<Data_t> c
 } // namespace
 
 namespace coronan::cli::plotting {
-struct curves_data
+class curves_data
 {
+public:
+  using data_time_t = Poco::DateTime;
+  using data_active_t = decltype(coronan::CountryData::TimelineData::active);
+  using data_confirmed_t = decltype(coronan::CountryData::TimelineData::confirmed);
+  using data_deaths_t = decltype(coronan::CountryData::TimelineData::deaths);
+  using data_recovered_t = decltype(coronan::CountryData::TimelineData::recovered);
+
   curves_data() = default;
-  curves_data(std::size_t size)
+  explicit curves_data(std::size_t size)
   {
     t.reserve(size);
     active.reserve(size);
@@ -52,17 +60,42 @@ struct curves_data
     deaths.reserve(size);
     recovered.reserve(size);
   }
-  std::vector<Poco::DateTime> t;
-  std::vector<decltype(coronan::CountryData::TimelineData::active)> active;
-  std::vector<decltype(coronan::CountryData::TimelineData::confirmed)> confirmed;
-  std::vector<decltype(coronan::CountryData::TimelineData::deaths)> deaths;
-  std::vector<decltype(coronan::CountryData::TimelineData::recovered)> recovered;
+
+  void append_data(data_time_t&& time, data_active_t active_cases, data_confirmed_t confirmed_cases,
+                   data_deaths_t deaths_cases, data_recovered_t recovered_cases);
+  [[nodiscard]] std::vector<data_time_t> const& get_time() const { return t; }
+  [[nodiscard]] auto get_active_cases() const
+  {
+    return std::pair<std::vector<data_time_t> const&, std::vector<data_active_t> const&>(t, active);
+  }
+  [[nodiscard]] auto get_confirmed_cases() const
+  {
+    return std::pair<std::vector<data_time_t> const&, std::vector<data_confirmed_t> const&>(t, confirmed);
+  }
+  [[nodiscard]] auto get_deaths_cases() const
+  {
+    return std::pair<std::vector<data_time_t> const&, std::vector<data_deaths_t> const&>(t, deaths);
+  }
+  [[nodiscard]] auto get_recovered_cases() const
+  {
+    return std::pair<std::vector<data_time_t> const&, std::vector<data_recovered_t> const&>(t, recovered);
+  }
+
+private:
+  std::vector<data_time_t> t;
+  std::vector<data_active_t> active;
+  std::vector<data_confirmed_t> confirmed;
+  std::vector<data_deaths_t> deaths;
+  std::vector<data_recovered_t> recovered;
 };
 
 // date formatting according to ISO 8601
-std::string const gp_dateformat = "%Y-%m-%d";
+constexpr std::string_view gp_dateformat = "%Y-%m-%d";
 // date formatting as provided by the corona-api.com service
-std::string const covid_dateformat = "%Y-%m-%dT%H:%M:%S.%iZ";
+constexpr std::string_view covid_dateformat = "%Y-%m-%dT%H:%M:%S.%iZ";
+
+// size of the plot output graphic WxH
+constexpr std::pair<std::size_t, std::size_t> plot_size{900, 600};
 
 void plot_data(std::string const& out_file, coronan::CountryData const& country_data)
 {
@@ -73,53 +106,60 @@ void plot_data(std::string const& out_file, coronan::CountryData const& country_
   // collect the data and store the data in separate vectors
   // (i.e. map the vector of structs to a struct of vectors)
   curves_data d(country_data.timeline.size());
-  for (auto const& timeline_entry : country_data.timeline)
-  {
-    d.t.emplace_back(convert_date_str_to_poco_date(timeline_entry.date));
-    d.active.emplace_back(timeline_entry.active);
-    d.confirmed.emplace_back(timeline_entry.confirmed);
-    d.deaths.emplace_back(timeline_entry.deaths);
-    d.recovered.emplace_back(timeline_entry.recovered);
-  }
+  std::for_each(country_data.timeline.cbegin(), country_data.timeline.cend(), 
+    [&d](auto const& te){d.append_data(convert_date_str_to_poco_date(te.date), te.active, te.confirmed, te.deaths, te.recovered);});
 
-  plot.plot_curve(d.t, d.active, "active");
-  plot.plot_curve(d.t, d.confirmed, "confirmed");
-  plot.plot_curve(d.t, d.deaths, "deaths");
-  plot.plot_curve(d.t, d.recovered, "recovered");
+  plot.plot_curve(d.get_active_cases(), "active");
+  plot.plot_curve(d.get_confirmed_cases(), "confirmed");
+  plot.plot_curve(d.get_deaths_cases(), "deaths");
+  plot.plot_curve(d.get_recovered_cases(), "recovered");
 
   // special commands to let Gnuplot know that the data in 1st column
   // are of date/time format.
   plot.gnuplot("set xdata time");
-  plot.gnuplot("set timefmt \"" + gp_dateformat + "\"");
-  plot.gnuplot("set format x \"" + gp_dateformat + "\"");
-  plot.gnuplot("set xtics " + std::to_string(get_suitable_xtics(d.t)));
+  plot.gnuplot("set timefmt \"" + std::string(gp_dateformat) + "\"");
+  plot.gnuplot("set format x \"" + std::string(gp_dateformat) + "\"");
+  plot.gnuplot("set xtics " + std::to_string(get_suitable_xtics(d.get_time())));
 
   sciplot::Figure fig{{plot}};
   fig.title("COVID-19 data for " + country_data.info.name);
-  fig.size(900, 600);
+  fig.size(plot_size.first, plot_size.second);
   fig.save(out_file);
 }
 
 Poco::DateTime convert_date_str_to_poco_date(std::string const& s)
 {
   int tzd = 0;
-  return Poco::DateTimeParser::parse(covid_dateformat, s, tzd);
+  return Poco::DateTimeParser::parse(std::string(covid_dateformat), s, tzd);
 }
 
 std::tuple<std::string, std::string, int> parse_gp_plot_string(std::string const& s)
 {
   std::regex re{"('[^']+' index \\d+) with ([a-z]+) .*linestyle (\\d+)"};
 
-  if (std::smatch m; regex_search(s, m, re) && m.size() == 4)
-    return std::make_tuple(m[1], m[2], std::stoi(m[3]));
-  else
+  std::smatch re_match;
+  if (!std::regex_search(s, re_match, re) || (re_match.size() != 4)) {
     throw std::runtime_error("regex doesn't match on \"" + s + "\"");
+  }
+
+  return std::make_tuple(re_match[1], re_match[2], std::stoi(re_match[3]));
 }
 
 int get_suitable_xtics(std::vector<Poco::DateTime> const& t, int num_tics)
 {
   auto dt = t.front() - t.back();
   return std::abs(dt.totalSeconds()) / num_tics;
+}
+
+
+void curves_data::append_data(data_time_t&& time, data_active_t active_cases, data_confirmed_t confirmed_cases,
+                              data_deaths_t deaths_cases, data_recovered_t recovered_cases)
+{
+  t.emplace_back(time);
+  active.push_back(active_cases);
+  confirmed.push_back(confirmed_cases);
+  deaths.push_back(deaths_cases);
+  recovered.push_back(recovered_cases);
 }
 } // namespace coronan::cli::plotting
 
@@ -131,7 +171,7 @@ namespace sciplot::internal {
 template <>
 auto escapeIfNeeded<Poco::DateTime>(Poco::DateTime const& val)
 {
-  return Poco::DateTimeFormatter::format(val, coronan::cli::plotting::gp_dateformat);
+  return Poco::DateTimeFormatter::format(val, std::string(coronan::cli::plotting::gp_dateformat));
 }
 
 // sciplot assumes that the data in the vectors are either string or numbers. Since

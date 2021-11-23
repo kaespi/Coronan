@@ -28,11 +28,13 @@ int main(int argc, char* argv[])
   {
     auto const country_data = coronan::CoronaAPIClient{}.request_country_data(opt.country_code);
 #ifdef USE_SCIPLOT
-    if (opt.plot_file != "")
+    if (!opt.plot_file.empty()) {
       coronan::cli::plotting::plot_data(opt.plot_file, country_data);
-    else
+    } else 
 #endif
+    {
       print_data(country_data);
+    }
   }
   catch (coronan::SSLException const& ex)
   {
