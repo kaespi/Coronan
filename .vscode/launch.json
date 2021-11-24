@@ -2,6 +2,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Cmake target (GDB)",
+            "type": "gdb",
+            "request": "launch",
+            "target": "${command:cmake.launchTargetPath}",
+            "cwd": "${workspaceRoot}",
+            "valuesFormatting": "parseText"
+        },
+        {
             "name": "Debug Unittests (GDB)",
             "type": "gdb",
             "request": "launch",
